@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Космос акций Мосбиржи</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(180deg, #0a0a23 0%, #1a1a3a 50%, #2a2a4a 100%);
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .cosmic-bg {
+            background: radial-gradient(ellipse at center, rgba(0,0,100,0.3) 0%, rgba(0,0,0,0.8) 100%);
+        }
+        
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            clip-path: circle(50%);
+            animation: twinkle 2s infinite;
+        }
+        
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+        
+        .galaxy-info {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .stock-card {
+            transition: all 0.3s ease;
+            backdrop-filter: blur(8px);
+            background: rgba(0, 0, 0, 0.7);
+        }
+        
+        .stock-card:hover {
+            transform: scale(1.05);
+            background: rgba(0, 0, 0, 0.9);
+        }
+        
+        .search-container {
+            backdrop-filter: blur(15px);
+            background: rgba(0, 0, 0, 0.5);
+        }
+        
+        .planet-glow {
+            box-shadow: 0 0 20px rgba(64, 224, 255, 0.6);
+        }
+        
+        .price-up { color: #10b981; }
+        .price-down { color: #ef4444; }
+        .price-neutral { color: #6b7280; }
+
+        #universe-container {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 0;
+        }
+
+        #universe-canvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        .overlay-panel {
+            position: fixed;
+            z-index: 50;
+            backdrop-filter: blur(10px);
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 10px;
+            color: white;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            .search-container {
+                padding: 0.75rem;
+            }
+            
+            .search-container .max-w-7xl {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .search-container h1 {
+                font-size: 1.25rem;
+            }
+            
+            .search-container .flex.items-center.space-x-4 {
+                flex-wrap: wrap;
+                gap: 0.5rem;
+                justify-content: center;
+            }
+            
+            .search-container input {
+                width: 200px;
+            }
+            
+            #info-panel {
+                right: 1rem;
+                top: 6rem;
+                width: calc(100vw - 2rem);
+                max-width: 320px;
+                max-height: 70vh;
+            }
+            
+            .fixed.bottom-0 .grid {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+            
+            .overlay-panel {
+                padding: 0.75rem;
+            }
+            
+            .info-grid {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
+            
+            .stock-card {
+                padding: 0.5rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .search-container h1 {
+                font-size: 1rem;
+            }
+            
+            .search-container .text-sm {
+                font-size: 0.75rem;
+            }
+            
+            .search-container input {
+                width: 160px;
+                font-size: 0.875rem;
+            }
+            
+            #info-panel {
+                width: calc(100vw - 1rem);
+                right: 0.5rem;
+            }
+        }
+
+        @media print {
+            body { height: auto; overflow: visible; }
+            .fixed { position: static !important; }
+            #universe-container { height: 60vh; }
+        }
+
+        .loading-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            color: white;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body class="cosmic-bg">
+    <!-- Индикатор загрузки -->
+    <div id="loading-indicator" class="loading-indicator">
+        <i class="fas fa-rocket fa-spin mr-2"></i>
+        Инициализация космоса...
+    </div>
+
+    <!-- Звездное небо -->
+    <div id="stars-container" class="fixed inset-0 pointer-events-none"></div>
+    
+    <!-- Верхняя панель с поиском и информацией -->
+    <div class="search-container fixed top-0 left-0 right-0 z-50 p-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-6">
+                <h1 class="text-2xl font-bold text-white flex items-center">
+                    <i class="fas fa-rocket mr-2 text-blue-400"></i>
+                    Космос МосБиржи
+                </h1>
+                <div class="flex items-center space-x-4 text-sm text-gray-300">
+                    <div class="flex items-center">
+                        <i class="fas fa-chart-line mr-1 text-green-400"></i>
+                        <span>IMOEX: <span class="text-white font-semibold">3,247.52</span></span>
+                        <span class="text-green-400 ml-1">+1.2%</span>
+                    </div>
+                    <div class="flex items-center">
+                        <i class="fas fa-clock mr-1 text-blue-400"></i>
+                        <span>Сессия: <span class="text-white">10:00-18:45</span></span>
+                    </div>
+                    <div class="flex items-center">
+                        <i class="fas fa-calendar mr-1 text-purple-400"></i>
+                        <span id="current-date" class="text-white"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-4">
+                <div class="relative">
+                    <input 
+                        type="text" 
+                        id="search-input"
+                        placeholder="Поиск акций..." 
+                        class="px-4 py-2 pl-10 bg-gray-800 text-white rounded-lg border border-gray-600 focus:border-blue-400 focus:outline-none w-64"
+                    >
+                    <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                </div>
+                <button id="reset-view" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                    <i class="fas fa-home mr-1"></i>
+                    Обзор
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Основная 3D сцена -->
+    <div id="universe-container" class="fixed inset-0">
+        <canvas id="universe-canvas" class="w-full h-full"></canvas>
+    </div>
+
+    <!-- Боковая панель с информацией -->
+    <div id="info-panel" class="overlay-panel right-4 top-20 w-80 p-6 max-h-96 overflow-y-auto transform translate-x-full transition-transform duration-300">
+        <div id="panel-content">
+            <div class="text-center py-12 text-gray-400">
+                <i class="fas fa-mouse-pointer text-4xl mb-4"></i>
+                <p>Нажмите на планету или галактику<br>для получения информации</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Нижние панели -->
+    <div class="fixed bottom-0 left-0 right-0 z-40 p-4">
+        <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Легенда -->
+            <div class="overlay-panel p-4">
+                <h3 class="font-bold mb-3 text-center">
+                    <i class="fas fa-palette mr-2"></i>Секторы
+                </h3>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 bg-blue-400 rounded-full mr-2"></div>
+                        <span>Технологии</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 bg-green-400 rounded-full mr-2"></div>
+                        <span>Банки</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 bg-red-400 rounded-full mr-2"></div>
+                        <span>Энергетика</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 bg-yellow-400 rounded-full mr-2"></div>
+                        <span>Металлургия</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-3 h-3 bg-purple-400 rounded-full mr-2"></div>
+                        <span>Телеком</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Управление -->
+            <div class="overlay-panel p-4">
+                <h3 class="font-bold mb-3 text-center">
+                    <i class="fas fa-gamepad mr-2"></i>Управление
+                </h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center">
+                        <i class="fas fa-mouse w-4 mr-2"></i>
+                        <span>Вращение камеры</span>
+                    </div>
+                    <div class="flex items-center">
+                        <i class="fas fa-scroll w-4 mr-2"></i>
+                        <span>Масштабирование</span>
+                    </div>
+                    <div class="flex items-center">
+                        <i class="fas fa-hand-pointer w-4 mr-2"></i>
+                        <span>Информация о компании</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Статистика -->
+            <div class="overlay-panel p-4">
+                <h3 class="font-bold mb-3 text-center">
+                    <i class="fas fa-chart-bar mr-2"></i>Статистика
+                </h3>
+                <div class="text-sm space-y-1">
+                    <div class="flex justify-between">
+                        <span>Галактик:</span>
+                        <span class="font-semibold">5</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Планет:</span>
+                        <span class="font-semibold">20</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Растущих:</span>
+                        <span class="text-green-400 font-semibold">12</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Падающих:</span>
+                        <span class="text-red-400 font-semibold">8</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Данные акций по секторам
+        const stockData = {
+            technology: {
+                name: 'Технологии',
+                color: 0x4f87ff,
+                position: [0, 0, 0],
+                stocks: [
+                    { ticker: 'YNDX', name: 'Яндекс', price: 2345.50, change: 2.3, volume: 1250000, marketCap: '1.2T', pe: 15.2, dividend: 2.1 },
+                    { ticker: 'OZON', name: 'Озон', price: 1876.20, change: -1.5, volume: 850000, marketCap: '456B', pe: 28.4, dividend: 0 },
+                    { ticker: 'VKCO', name: 'VK', price: 234.80, change: 0.8, volume: 2100000, marketCap: '234B', pe: 12.8, dividend: 3.5 },
+                    { ticker: 'TCSG', name: 'TCS Group', price: 3456.10, change: 3.2, volume: 450000, marketCap: '789B', pe: 8.9, dividend: 4.2 }
+                ]
+            },
+            banking: {
+                name: 'Банки',
+                color: 0x10b981,
+                position: [15, 0, 15],
+                stocks: [
+                    { ticker: 'SBER', name: 'Сбербанк', price: 289.45, change: 1.8, volume: 5200000, marketCap: '6.2T', pe: 6.4, dividend: 8.1 },
+                    { ticker: 'VTBR', name: 'ВТБ', price: 0.0567, change: -0.5, volume: 15600000, marketCap: '1.1T', pe: 4.2, dividend: 5.7 },
+                    { ticker: 'AFKS', name: 'АФК Система', price: 145.60, change: 0.3, volume: 890000, marketCap: '890B', pe: 18.6, dividend: 2.8 },
+                    { ticker: 'AFLT', name: 'Аэрофлот', price: 78.25, change: 2.1, volume: 1200000, marketCap: '167B', pe: 24.3, dividend: 1.4 }
+                ]
+            },
+            energy: {
+                name: 'Энергетика',
+                color: 0xef4444,
+                position: [-15, 0, 15],
+                stocks: [
+                    { ticker: 'GAZP', name: 'Газпром', price: 145.80, change: -0.8, volume: 3400000, marketCap: '3.5T', pe: 3.2, dividend: 12.5 },
+                    { ticker: 'LKOH', name: 'ЛУКОЙЛ', price: 5678.50, change: 1.5, volume: 280000, marketCap: '4.1T', pe: 5.8, dividend: 9.7 },
+                    { ticker: 'ROSN', name: 'Роснефть', price: 456.30, change: -1.2, volume: 1800000, marketCap: '2.8T', pe: 4.6, dividend: 7.2 },
+                    { ticker: 'NVTK', name: 'Новатэк', price: 987.40, change: 0.7, volume: 650000, marketCap: '2.3T', pe: 7.1, dividend: 6.8 }
+                ]
+            },
+            metals: {
+                name: 'Металлургия',
+                color: 0xfbbf24,
+                position: [15, 0, -15],
+                stocks: [
+                    { ticker: 'GMKN', name: 'ГМК Норникель', price: 16789.00, change: 2.8, volume: 120000, marketCap: '2.6T', pe: 9.4, dividend: 15.2 },
+                    { ticker: 'NLMK', name: 'НЛМК', price: 167.45, change: -0.3, volume: 2300000, marketCap: '678B', pe: 6.8, dividend: 11.3 },
+                    { ticker: 'MAGN', name: 'ММК', price: 45.67, change: 1.4, volume: 3400000, marketCap: '456B', pe: 5.2, dividend: 8.9 },
+                    { ticker: 'CHMF', name: 'Северсталь', price: 1234.80, change: -2.1, volume: 890000, marketCap: '890B', pe: 7.6, dividend: 9.8 }
+                ]
+            },
+            telecom: {
+                name: 'Телеком',
+                color: 0xa855f7,
+                position: [-15, 0, -15],
+                stocks: [
+                    { ticker: 'MTSS', name: 'МТС', price: 234.70, change: 0.9, volume: 1500000, marketCap: '456B', pe: 11.2, dividend: 6.8 },
+                    { ticker: 'RTKM', name: 'Ростелеком', price: 56.80, change: -1.8, volume: 2800000, marketCap: '234B', pe: 14.6, dividend: 4.2 },
+                    { ticker: 'MGTS', name: 'МГТС', price: 1456.30, change: 0.4, volume: 450000, marketCap: '123B', pe: 16.8, dividend: 5.1 },
+                    { ticker: 'TTLK', name: 'Таттелеком', price: 0.234, change: 3.5, volume: 5600000, marketCap: '45B', pe: 22.4, dividend: 2.8 }
+                ]
+            }
+        };
+
+        // Глобальные переменные
+        let scene, camera, renderer, controls;
+        let galaxies = [];
+        let planets = [];
+        let selectedObject = null;
+        let isMobile = window.innerWidth <= 768;
+        let animationId;
+
+        // Простая реализация OrbitControls
+        class SimpleOrbitControls {
+            constructor(camera, domElement) {
+                this.camera = camera;
+                this.domElement = domElement;
+                this.target = new THREE.Vector3(0, 0, 0);
+                this.minDistance = 5;
+                this.maxDistance = 100;
+                this.enableDamping = true;
+                this.dampingFactor = 0.05;
+                this.enableRotate = true;
+                this.rotateSpeed = 1.0;
+                this.enableZoom = true;
+                this.zoomSpeed = 1.0;
+                this.enablePan = false; // Отключим панорамирование для простоты
+
+                this.spherical = new THREE.Spherical();
+                this.sphericalDelta = new THREE.Spherical();
+                this.scale = 1;
+
+                this.rotateStart = new THREE.Vector2();
+                this.rotateEnd = new THREE.Vector2();
+                this.rotateDelta = new THREE.Vector2();
+
+                this.STATE = { NONE: -1, ROTATE: 0, DOLLY: 1 };
+                this.state = this.STATE.NONE;
+
+                this.addEventListeners();
+                this.update();
+            }
+
+            addEventListeners() {
+                this.domElement.addEventListener('mousedown', this.onMouseDown.bind(this));
+                this.domElement.addEventListener('wheel', this.onMouseWheel.bind(this));
+                this.domElement.addEventListener('touchstart', this.onTouchStart.bind(this));
+                this.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+            }
+
+            onMouseDown(event) {
+                if (!this.enableRotate) return;
+                event.preventDefault();
+                
+                this.rotateStart.set(event.clientX, event.clientY);
+                this.state = this.STATE.ROTATE;
+                
+                document.addEventListener('mousemove', this.onMouseMove.bind(this));
+                document.addEventListener('mouseup', this.onMouseUp.bind(this));
+            }
+
+            onMouseMove(event) {
+                if (this.state !== this.STATE.ROTATE) return;
+                event.preventDefault();
+                
+                this.rotateEnd.set(event.clientX, event.clientY);
+                this.rotateDelta.subVectors(this.rotateEnd, this.rotateStart);
+                
+                this.rotateLeft(2 * Math.PI * this.rotateDelta.x / this.domElement.clientHeight * this.rotateSpeed);
+                this.rotateUp(2 * Math.PI * this.rotateDelta.y / this.domElement.clientHeight * this.rotateSpeed);
+                
+                this.rotateStart.copy(this.rotateEnd);
+                this.update();
+            }
+
+            onMouseUp() {
+                document.removeEventListener('mousemove', this.onMouseMove);
+                document.removeEventListener('mouseup', this.onMouseUp);
+                this.state = this.STATE.NONE;
+            }
+
+            onMouseWheel(event) {
+                if (!this.enableZoom) return;
+                event.preventDefault();
+                
+                if (event.deltaY < 0) {
+                    this.dollyIn(this.getZoomScale());
+                } else if (event.deltaY > 0) {
+                    this.dollyOut(this.getZoomScale());
+                }
+                this.update();
+            }
+
+            onTouchStart(event) {
+                if (event.touches.length === 1) {
+                    this.rotateStart.set(event.touches[0].pageX, event.touches[0].pageY);
+                    this.state = this.STATE.ROTATE;
+                    
+                    this.domElement.addEventListener('touchmove', this.onTouchMove.bind(this));
+                    this.domElement.addEventListener('touchend', this.onTouchEnd.bind(this));
+                }
+            }
+
+            onTouchMove(event) {
+                event.preventDefault();
+                if (event.touches.length === 1 && this.state === this.STATE.ROTATE) {
+                    this.rotateEnd.set(event.touches[0].pageX, event.touches[0].pageY);
+                    this.rotateDelta.subVectors(this.rotateEnd, this.rotateStart);
+                    
+                    this.rotateLeft(2 * Math.PI * this.rotateDelta.x / this.domElement.clientHeight * this.rotateSpeed);
+                    this.rotateUp(2 * Math.PI * this.rotateDelta.y / this.domElement.clientHeight * this.rotateSpeed);
+                    
+                    this.rotateStart.copy(this.rotateEnd);
+                    this.update();
+                }
+            }
+
+            onTouchEnd() {
+                this.domElement.removeEventListener('touchmove', this.onTouchMove);
+                this.domElement.removeEventListener('touchend', this.onTouchEnd);
+                this.state = this.STATE.NONE;
+            }
+
+            rotateLeft(angle) {
+                this.sphericalDelta.theta -= angle;
+            }
+
+            rotateUp(angle) {
+                this.sphericalDelta.phi -= angle;
+            }
+
+            dollyIn(dollyScale) {
+                this.scale /= dollyScale;
+            }
+
+            dollyOut(dollyScale) {
+                this.scale *= dollyScale;
+            }
+
+            getZoomScale() {
+                return Math.pow(0.95, this.zoomSpeed);
+            }
+
+            update() {
+                const offset = new THREE.Vector3();
+                const position = this.camera.position;
+                
+                offset.copy(position).sub(this.target);
+                this.spherical.setFromVector3(offset);
+
+                this.spherical.theta += this.sphericalDelta.theta;
+                this.spherical.phi += this.sphericalDelta.phi;
+
+                // Ограничиваем углы
+                this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi));
+                this.spherical.radius *= this.scale;
+                this.spherical.radius = Math.max(this.minDistance, Math.min(this.maxDistance, this.spherical.radius));
+
+                offset.setFromSpherical(this.spherical);
+                position.copy(this.target).add(offset);
+                this.camera.lookAt(this.target);
+
+                if (this.enableDamping) {
+                    this.sphericalDelta.theta *= (1 - this.dampingFactor);
+                    this.sphericalDelta.phi *= (1 - this.dampingFactor);
+                } else {
+                    this.sphericalDelta.set(0, 0, 0);
+                }
+
+                this.scale = 1;
+                return false;
+            }
+
+            reset() {
+                this.target.set(0, 0, 0);
+                this.camera.position.set(0, 20, 40);
+                this.update();
+                this.state = this.STATE.NONE;
+            }
+        }
+
+        // Ждем загрузки THREE.js
+        function waitForTHREE() {
+            return new Promise((resolve, reject) => {
+                let attempts = 0;
+                const maxAttempts = 50;
+                
+                function checkTHREE() {
+                    attempts++;
+                    if (typeof THREE !== 'undefined') {
+                        console.log('THREE.js загружен успешно');
+                        resolve();
+                    } else if (attempts >= maxAttempts) {
+                        reject(new Error('THREE.js не удалось загрузить'));
+                    } else {
+                        setTimeout(checkTHREE, 100);
+                    }
+                }
+                checkTHREE();
+            });
+        }
+
+        // Инициализация Three.js
+        async function init() {
+            try {
+                console.log('Начинаем инициализацию...');
+                
+                // Ждем загрузки THREE.js
+                await waitForTHREE();
+                
+                // Создание сцены
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x000033);
+                console.log('Сцена создана');
+
+                // Добавляем туман
+                scene.fog = new THREE.Fog(0x000033, 20, 150);
+
+                // Создание камеры
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+                camera.position.set(0, 20, 40);
+                camera.lookAt(0, 0, 0);
+                console.log('Камера создана');
+
+                // Создание рендерера
+                const canvas = document.getElementById('universe-canvas');
+                if (!canvas) {
+                    throw new Error('Canvas не найден');
+                }
+                
+                renderer = new THREE.WebGLRenderer({ 
+                    canvas: canvas, 
+                    antialias: true,
+                    alpha: false 
+                });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                renderer.setClearColor(0x000033, 1);
+                
+                // Включаем гамма коррекцию
+                renderer.gammaOutput = true;
+                renderer.gammaFactor = 2.2;
+                
+                console.log('Рендерер создан');
+
+                // Управление камерой
+                controls = new SimpleOrbitControls(camera, renderer.domElement);
+                controls.minDistance = isMobile ? 10 : 5;
+                controls.maxDistance = isMobile ? 150 : 100;
+                
+                if (isMobile) {
+                    controls.rotateSpeed = 0.5;
+                    controls.zoomSpeed = 0.8;
+                }
+                console.log('Управление настроено');
+
+                // Освещение
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
+                scene.add(ambientLight);
+                
+                const pointLight = new THREE.PointLight(0xffffff, 1.5, 200);
+                pointLight.position.set(0, 20, 20);
+                scene.add(pointLight);
+                
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                dirLight.position.set(-10, 10, 10);
+                scene.add(dirLight);
+                
+                console.log('Освещение добавлено');
+
+                // Создание звездного неба
+                createStarField();
+                console.log('Звезды созданы');
+
+                // Создание галактик и планет
+                createGalaxies();
+                console.log('Галактики созданы, всего объектов в сцене:', scene.children.length);
+
+                // Добавление обработчиков событий
+                addEventListeners();
+
+                // Установка текущей даты
+                document.getElementById('current-date').textContent = new Date().toLocaleDateString('ru-RU');
+
+                // Скрываем индикатор загрузки
+                const loadingIndicator = document.getElementById('loading-indicator');
+                if (loadingIndicator) {
+                    loadingIndicator.style.display = 'none';
+                }
+
+                console.log('Инициализация завершена, запускаем анимацию');
+                // Запуск анимации
+                animate();
+                
+            } catch (error) {
+                console.error('Ошибка при инициализации:', error);
+                const loadingIndicator = document.getElementById('loading-indicator');
+                if (loadingIndicator) {
+                    loadingIndicator.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Ошибка загрузки';
+                }
+            }
+        }
+
+        function createStarField() {
+            // HTML звезды для фона
+            const starsContainer = document.getElementById('stars-container');
+            const starCount = isMobile ? 100 : 200;
+            
+            for (let i = 0; i < starCount; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                const size = Math.random() * 3 + 1;
+                star.style.width = size + 'px';
+                star.style.height = size + 'px';
+                star.style.animationDelay = Math.random() * 2 + 's';
+                starsContainer.appendChild(star);
+            }
+
+            // 3D звезды
+            const starGeometry = new THREE.BufferGeometry();
+            const starCount3D = isMobile ? 500 : 1000;
+            const positions = new Float32Array(starCount3D * 3);
+            
+            for (let i = 0; i < starCount3D * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 400;     // x
+                positions[i + 1] = (Math.random() - 0.5) * 400; // y
+                positions[i + 2] = (Math.random() - 0.5) * 400; // z
+            }
+            
+            starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const starMaterial = new THREE.PointsMaterial({ 
+                color: 0xffffff, 
+                size: 2,
+                sizeAttenuation: false
+            });
+            const stars = new THREE.Points(starGeometry, starMaterial);
+            scene.add(stars);
+        }
+
+        function createGalaxies() {
+            console.log('Создаем галактики...');
+            
+            Object.entries(stockData).forEach(([sectorKey, sectorData]) => {
+                console.log(`Создаем галактику для сектора: ${sectorData.name}`);
+                
+                // Создание основной сферы галактики
+                const galaxyGeometry = new THREE.SphereGeometry(isMobile ? 2.5 : 3, 16, 16);
+                const galaxyMaterial = new THREE.MeshPhongMaterial({ 
+                    color: sectorData.color,
+                    transparent: false,
+                    emissive: sectorData.color,
+                    emissiveIntensity: 0.3,
+                    shininess: 30
+                });
+                
+                const galaxy = new THREE.Mesh(galaxyGeometry, galaxyMaterial);
+                galaxy.position.set(...sectorData.position);
+                galaxy.userData = { 
+                    type: 'galaxy', 
+                    sector: sectorKey, 
+                    data: sectorData 
+                };
+                
+                // Создание кольца вокруг галактики
+                const ringGeometry = new THREE.RingGeometry(isMobile ? 4 : 5, isMobile ? 6 : 7, 32);
+                const ringMaterial = new THREE.MeshBasicMaterial({ 
+                    color: sectorData.color, 
+                    transparent: true, 
+                    opacity: 0.3,
+                    side: THREE.DoubleSide
+                });
+                const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                ring.rotation.x = Math.PI / 2;
+                galaxy.add(ring);
+                
+                scene.add(galaxy);
+                galaxies.push(galaxy);
+                
+                console.log(`Галактика ${sectorData.name} создана в позиции:`, sectorData.position);
+
+                // Создание планет для этой галактики
+                sectorData.stocks.forEach((stock, index) => {
+                    const angle = (index / sectorData.stocks.length) * Math.PI * 2;
+                    const radius = (isMobile ? 6 : 7) + Math.random() * (isMobile ? 3 : 4);
+                    
+                    const planetSize = (isMobile ? 0.6 : 0.8) + Math.random() * (isMobile ? 0.4 : 0.6);
+                    const planetGeometry = new THREE.SphereGeometry(planetSize, 12, 12);
+                    const planetMaterial = new THREE.MeshPhongMaterial({ 
+                        color: sectorData.color,
+                        transparent: false,
+                        emissive: sectorData.color,
+                        emissiveIntensity: stock.change >= 0 ? 0.4 : 0.2,
+                        shininess: 20
+                    });
+                    
+                    const planet = new THREE.Mesh(planetGeometry, planetMaterial);
+                    planet.position.set(
+                        sectorData.position[0] + Math.cos(angle) * radius,
+                        sectorData.position[1] + (Math.random() - 0.5) * 4,
+                        sectorData.position[2] + Math.sin(angle) * radius
+                    );
+                    
+                    planet.userData = { 
+                        type: 'planet', 
+                        stock: stock, 
+                        sector: sectorKey,
+                        originalPosition: planet.position.clone(),
+                        orbitAngle: angle,
+                        orbitRadius: radius,
+                        galaxyPosition: sectorData.position
+                    };
+                    
+                    scene.add(planet);
+                    planets.push(planet);
+                    
+                    console.log(`Планета ${stock.ticker} создана`);
+                });
+            });
+            
+            console.log(`Создано галактик: ${galaxies.length}, планет: ${planets.length}`);
+        }
+
+        function addEventListeners() {
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+
+            // Функция обработки клика/касания
+            function handleInteraction(event) {
+                event.preventDefault();
+                
+                let clientX, clientY;
+                
+                // Определяем координаты для мыши или касания
+                if (event.type === 'touchstart' || event.type === 'touchend') {
+                    if (event.touches && event.touches.length > 0) {
+                        clientX = event.touches[0].clientX;
+                        clientY = event.touches[0].clientY;
+                    } else if (event.changedTouches && event.changedTouches.length > 0) {
+                        clientX = event.changedTouches[0].clientX;
+                        clientY = event.changedTouches[0].clientY;
+                    } else {
+                        return;
+                    }
+                } else {
+                    clientX = event.clientX;
+                    clientY = event.clientY;
+                }
+
+                mouse.x = (clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects([...galaxies, ...planets]);
+
+                if (intersects.length > 0) {
+                    const object = intersects[0].object;
+                    showObjectInfo(object);
+                }
+            }
+
+            // Добавляем обработчики для мыши и касаний
+            renderer.domElement.addEventListener('click', handleInteraction);
+            renderer.domElement.addEventListener('touchend', handleInteraction);
+
+            // Поиск акций
+            const searchInput = document.getElementById('search-input');
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                searchStocks(query);
+            });
+
+            // Кнопка сброса вида
+            document.getElementById('reset-view').addEventListener('click', () => {
+                controls.reset();
+                if (isMobile) {
+                    camera.position.set(0, 25, 50);
+                } else {
+                    camera.position.set(0, 20, 40);
+                }
+                camera.lookAt(0, 0, 0);
+                hideInfoPanel();
+            });
+
+            // Обработка изменения размера окна
+            window.addEventListener('resize', () => {
+                isMobile = window.innerWidth <= 768;
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                
+                // Обновляем настройки управления для мобильных устройств
+                if (isMobile) {
+                    controls.minDistance = 10;
+                    controls.maxDistance = 150;
+                    controls.rotateSpeed = 0.5;
+                    controls.zoomSpeed = 0.8;
+                } else {
+                    controls.minDistance = 5;
+                    controls.maxDistance = 100;
+                    controls.rotateSpeed = 1;
+                    controls.zoomSpeed = 1;
+                }
+            });
+        }
+
+        function showObjectInfo(object) {
+            const panel = document.getElementById('info-panel');
+            const content = document.getElementById('panel-content');
+            
+            if (object.userData.type === 'galaxy') {
+                const sectorData = object.userData.data;
+                content.innerHTML = `
+                    <div class="text-center mb-4">
+                        <div class="w-16 h-16 mx-auto mb-3 rounded-full flex items-center justify-center" style="background-color: #${sectorData.color.toString(16).padStart(6, '0')}">
+                            <i class="fas fa-star text-white text-2xl"></i>
+                        </div>
+                        <h2 class="text-xl font-bold">${sectorData.name}</h2>
+                        <p class="text-gray-300 text-sm">Галактика ${sectorData.stocks.length} акций</p>
+                    </div>
+                    
+                    <div class="space-y-2 max-h-64 overflow-y-auto">
+                        ${sectorData.stocks.map(stock => `
+                            <div class="stock-card rounded-lg p-3 border border-gray-600">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <h3 class="font-bold">${stock.ticker}</h3>
+                                        <p class="text-xs text-gray-300">${stock.name}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="font-bold">${stock.price.toLocaleString('ru-RU')} ₽</div>
+                                        <div class="${stock.change >= 0 ? 'price-up' : 'price-down'} text-xs">
+                                            ${stock.change >= 0 ? '+' : ''}${stock.change}%
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else if (object.userData.type === 'planet') {
+                const stock = object.userData.stock;
+                const sectorData = stockData[object.userData.sector];
+                content.innerHTML = `
+                    <div class="text-center mb-4">
+                        <div class="w-16 h-16 mx-auto mb-3 rounded-full planet-glow flex items-center justify-center" style="background-color: #${sectorData.color.toString(16).padStart(6, '0')}">
+                            <span class="text-white font-bold text-sm">${stock.ticker}</span>
+                        </div>
+                        <h2 class="text-xl font-bold">${stock.name}</h2>
+                        <p class="text-gray-300 text-sm">${sectorData.name}</p>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div class="bg-gray-800 rounded-lg p-3">
+                            <div class="text-2xl font-bold mb-1">${stock.price.toLocaleString('ru-RU')} ₽</div>
+                            <div class="${stock.change >= 0 ? 'price-up' : 'price-down'}">
+                                <i class="fas fa-arrow-${stock.change >= 0 ? 'up' : 'down'} mr-1"></i>
+                                ${stock.change >= 0 ? '+' : ''}${stock.change}%
+                            </div>
+                        </div>
+                        
+                        <div class="info-grid text-sm">
+                            <div>
+                                <div class="text-gray-400">Объем торгов</div>
+                                <div class="font-semibold">${stock.volume.toLocaleString('ru-RU')}</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-400">Капитализация</div>
+                                <div class="font-semibold">${stock.marketCap}</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-400">P/E</div>
+                                <div class="font-semibold">${stock.pe}</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-400">Дивиденды</div>
+                                <div class="font-semibold">${stock.dividend}%</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            panel.classList.remove('translate-x-full');
+        }
+
+        function hideInfoPanel() {
+            const panel = document.getElementById('info-panel');
+            panel.classList.add('translate-x-full');
+        }
+
+        function searchStocks(query) {
+            planets.forEach(planet => {
+                const stock = planet.userData.stock;
+                const matches = !query || 
+                               stock.ticker.toLowerCase().includes(query) || 
+                               stock.name.toLowerCase().includes(query);
+                
+                if (matches) {
+                    planet.material.emissive.setHex(query ? 0xffff00 : stockData[planet.userData.sector].color);
+                    planet.material.emissiveIntensity = query ? 0.8 : (planet.userData.stock.change >= 0 ? 0.4 : 0.2);
+                } else {
+                    planet.material.emissive.setHex(0x000000);
+                    planet.material.emissiveIntensity = 0.1;
+                }
+            });
+        }
+
+        function animate() {
+            animationId = requestAnimationFrame(animate);
+            
+            const time = Date.now() * 0.001;
+            
+            // Анимация галактик
+            galaxies.forEach(galaxy => {
+                galaxy.rotation.y += 0.005;
+                // Анимация кольца галактики
+                if (galaxy.children[0]) {
+                    galaxy.children[0].rotation.z += 0.01;
+                }
+            });
+            
+            // Анимация планет
+            planets.forEach((planet, index) => {
+                const userData = planet.userData;
+                userData.orbitAngle += 0.008 + Math.random() * 0.003;
+                
+                // Орбитальное движение
+                planet.position.x = userData.galaxyPosition[0] + Math.cos(userData.orbitAngle) * userData.orbitRadius;
+                planet.position.z = userData.galaxyPosition[2] + Math.sin(userData.orbitAngle) * userData.orbitRadius;
+                planet.position.y = userData.galaxyPosition[1] + Math.sin(time + index) * 0.8;
+                
+                // Вращение планет
+                planet.rotation.x += 0.01;
+                planet.rotation.y += 0.02;
+            });
+            
+            // Обновление управления камерой
+            controls.update();
+            
+            // Рендеринг
+            renderer.render(scene, camera);
+        }
+
+        // Запуск приложения
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM загружен, запускаем инициализацию');
+            init();
+        });
+    </script>
+</body>
+</html>

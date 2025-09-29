@@ -1,0 +1,62 @@
+[
+  {
+    "name": "Сбербанк",
+    "ticker": "SBER",
+    "value": 285.50,
+    "change": 2.15
+  },
+  {
+    "name": "Газпром",
+    "ticker": "GAZP",
+    "value": 157.80,
+    "change": -1.25
+  },
+  {
+    "name": "Лукойл",
+    "ticker": "LKOH",
+    "value": 6240.00,
+    "change": 0.85
+  },
+  {
+    "name": "Яндекс",
+    "ticker": "YNDX",
+    "value": 3580.25,
+    "change": -0.65
+  },
+  {
+    "name": "Норникель",
+    "ticker": "GMKN",
+    "value": 17800.40,
+    "change": 1.90
+  },
+  {
+    "name": "Роснефть",
+    "ticker": "ROSN",
+    "value": 520.70,
+    "change": 0.45
+  },
+  {
+    "name": "МТС",
+    "ticker": "MTSS",
+    "value": 330.15,
+    "change": -0.35
+  },
+  {
+    "name": "Полюс Золото",
+    "ticker": "PLZL",
+    "value": 13500.00,
+    "change": 3.25
+  },
+  {
+    "name": "Аэрофлот",
+    "ticker": "AFLT",
+    "value": 36.80,
+    "change": -2.10
+  },
+  {
+    "name": "Новатэк",
+    "ticker": "NVTK",
+    "value": 1700.50,
+    "change": 1.10
+  }
+]

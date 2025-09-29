@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Тепловая карта — MOEX Live (по секторам)</title>
+  <style>
+    body { 
+      margin: 0; 
+      overflow: hidden; 
+      font-family: Arial, sans-serif; 
+      transition: background 0.3s; 
+    }
+    body.dark-theme {
+      background: #000;
+    }
+    body.light-theme {
+      background: #f5f5f5;
+    }
+    canvas { display: block; }
+    .hint {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      pointer-events: none;
+      z-index: 100;
+    }
+    body.dark-theme .hint {
+      color: white;
+      background: rgba(0,0,0,0.6);
+    }
+    body.light-theme .hint {
+      color: #333;
+      background: rgba(255,255,255,0.8);
+    }
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 24px;
+      z-index: 1000;
+      padding: 20px 40px;
+      border-radius: 10px;
+    }
+    body.dark-theme #loading {
+      color: white;
+      background: rgba(0,0,0,0.7);
+    }
+    body.light-theme #loading {
+      color: #333;
+      background: rgba(255,255,255,0.8);
+    }
+    @media (max-width: 900px) {
+      .hint {
+        font-size: 12px;
+        padding: 6px 8px;
+      }
+      #loading {
+        font-size: 18px;
+        padding: 12px 18px;
+      }
+      canvas {
+        width: 100vw !important;
+        height: 100vh !important;
+      }
+    }
+    @media (max-width: 600px) {
+      .hint {
+        font-size: 10px;
+        padding: 4px 6px;
+      }
+      #loading {
+        font-size: 14px;
+        padding: 8px 10px;
+      }
+    }
+    #back-btn, #theme-toggle {
+      position: absolute;
+      z-index: 200;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 18px;
+      font-size: 16px;
+      cursor: pointer;
+      opacity: 0.85;
+      transition: background 0.2s;
+    }
+    #back-btn {
+      display: none;
+      top: 15px;
+      right: 15px;
+    }
+    #theme-toggle {
+      top: 15px;
+      right: 80px; /* Убедимся, что кнопка не перекрывает "Назад" */
+    }
+    body.dark-theme #back-btn, body.dark-theme #theme-toggle {
+      background: #222;
+      color: #fff;
+    }
+    body.light-theme #back-btn, body.light-theme #theme-toggle {
+      background: #ddd;
+      color: #333;
+    }
+    #back-btn:active, #back-btn:hover, #theme-toggle:active, #theme-toggle:hover {
+      background: #444;
+    }
+    body.light-theme #back-btn:active, body.light-theme #back-btn:hover,
+    body.light-theme #theme-toggle:active, body.light-theme #theme-toggle:hover {
+      background: #bbb;
+    }
+    @media (max-width: 600px) {
+      #back-btn, #theme-toggle {
+        font-size: 13px;
+        padding: 7px 12px;
+      }
+      #theme-toggle {
+        right: 60px;
+      }
+    }
+  </style>
+</head>
+<body class="dark-theme">
+  <div class="hint">Кликните на сектор для детального просмотра. Клик по пустому месту — закрыть.</div>
+  <button id="back-btn">Назад</button>
+  <button id="theme-toggle">Светлая тема</button>
+  <div id="loading">Загрузка данных MOEX...</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+
+  <script>
+    // --- Глобальные переменные для управления темой ---
+    let scene, allCubes = [], sectorGroups = [];
+    const body = document.body;
+    let isLightTheme = false;
+
+    // --- Функция переключения темы ---
+    function toggleTheme() {
+      isLightTheme = !isLightTheme;
+      if (isLightTheme) {
+        body.classList.remove('dark-theme');
+        body.classList.add('light-theme');
+        document.getElementById('theme-toggle').textContent = 'Темная тема';
+        scene.background = new THREE.Color(0xf5f5f5);
+      } else {
+        body.classList.remove('light-theme');
+        body.classList.add('dark-theme');
+        document.getElementById('theme-toggle').textContent = 'Светлая тема';
+        scene.background = new THREE.Color(0x0a0a1a);
+      }
+      // Обновляем текстуры кубов и подписей
+      updateTextures();
+    }
+
+    // --- Обновление текстур для кубов и подписей ---
+    function updateTextures() {
+      allCubes.forEach(cube => {
+        const { ticker, change } = cube.userData.item;
+        cube.userData.labelTexture = createFaceTexture(ticker, change);
+      });
+      sectorGroups.forEach(group => {
+        const titleSprite = group.children.find(child => child.isSprite);
+        if (titleSprite) {
+          const titleCanvas = document.createElement('canvas');
+          titleCanvas.width = 1024 * window.devicePixelRatio;
+          titleCanvas.height = 256 * window.devicePixelRatio;
+          titleCanvas.style.width = '1024px';
+          titleCanvas.style.height = '256px';
+          const tCtx = titleCanvas.getContext('2d');
+          tCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+          tCtx.fillStyle = isLightTheme ? 'rgba(50,50,50,0.9)' : 'rgba(255,255,255,0.9)';
+          tCtx.font = 'bold 60px Arial';
+          tCtx.textAlign = 'center';
+          tCtx.textBaseline = 'middle';
+          tCtx.fillText(group.userData.name, 512, 128);
+          const titleTex = new THREE.CanvasTexture(titleCanvas);
+          titleTex.minFilter = THREE.LinearFilter;
+          titleSprite.material.map = titleTex;
+          titleSprite.material.needsUpdate = true;
+        }
+      });
+    }
+
+    // --- Обработчик переключения темы ---
+    document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+
+    // --- ЗАГРУЗКА БИБЛИОТЕК ---
+    function loadScript(src, callback) {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = callback;
+      script.onerror = () => console.error(`Ошибка загрузки скрипта: ${src}`);
+      document.head.appendChild(script);
+    }
+
+    let loadedLibs = 0;
+    const totalLibs = 3;
+
+    function onLibLoaded() {
+      loadedLibs++;
+      if (loadedLibs === totalLibs) {
+        console.log("Все библиотеки загружены!");
+        initApp();
+      }
+    }
+
+    loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js', onLibLoaded);
+    loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js', onLibLoaded);
+    loadScript('https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js', onLibLoaded);
+
+    // --- ОСНОВНОЙ КОД ПРИЛОЖЕНИЯ ---
+    function initApp() {
+      const DPR = window.devicePixelRatio || 1;
+
+      function getColor(value) {
+        const intensity = Math.min(1, Math.abs(value) / 5);
+        return value >= 0 
+          ? new THREE.Color(0, 0.3 + intensity * 0.7, 0)
+          : new THREE.Color(0.3 + intensity * 0.7, 0, 0);
+      }
+
+      function createFaceTexture(ticker, change) {
+        const size = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = size * DPR;
+        canvas.height = size * DPR;
+        canvas.style.width = `${size}px`;
+        canvas.style.height = `${size}px`;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Failed to get 2D context');
+        ctx.scale(DPR, DPR);
+
+        ctx.fillStyle = isLightTheme ? 'rgba(200,200,210,0.5)' : 'rgba(50,50,60,0.5)';
+        ctx.fillRect(0, 0, size, size);
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 2;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+
+        const tickerColor = change >= 0 ? '#80ff80' : '#ff8080';
+        ctx.fillStyle = tickerColor;
+        ctx.font = 'bold 28px Arial';
+        ctx.fillText(ticker, size / 2, size / 2 - 12);
+
+        ctx.fillStyle = isLightTheme ? '#333' : '#ffffff';
+        ctx.font = '22px Arial';
+        ctx.fillText(`${change >= 0 ? '+' : ''}${change.toFixed(1)}%`, size / 2, size / 2 + 14);
+
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = false;
+        return texture;
+      }
+
+      // --- Сцена ---
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(isLightTheme ? 0xf5f5f5 : 0x0a0a1a);
+
+      // --- ОРТОГРАФИЧЕСКАЯ КАМЕРА ---
+      const aspect = window.innerWidth / window.innerHeight;
+      let frustumSize = 40;
+      const camera = new THREE.OrthographicCamera(
+        -frustumSize * aspect / 2, frustumSize * aspect / 2,
+        frustumSize / 2, -frustumSize / 2,
+        0.1, 5000
+      );
+      camera.position.set(0, 100, 40);
+      camera.lookAt(0, 0, 0);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(DPR);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambient);
+      const light = new THREE.DirectionalLight(0xffffff, 1.0);
+      light.position.set(10, 20, 15);
+      scene.add(light);
+
+      let controls = null;
+      let focusedSector = null;
+      let initialState = {
+        camera: {
+          position: new THREE.Vector3(0, 70, 30),
+          target: new THREE.Vector3(0, 0, 0),
+          left: null,
+          right: null,
+          top: null,
+          bottom: null
+        },
+        sectors: [],
+        frustumSize: 60
+      };
+
+      const FACE_NORMALS = [
+        new THREE.Vector3(1, 0, 0),
+        new THREE.Vector3(-1, 0, 0),
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(0, -1, 0),
+        new THREE.Vector3(0, 0, 1),
+        new THREE.Vector3(0, 0, -1)
+      ];
+
+      function createHeatmap(sectorName, data, startPos) {
+        const group = new THREE.Group();
+        group.position.copy(startPos);
+        group.userData = { name: sectorName, originalPos: startPos.clone() };
+
+        const cols = 2;
+        const rows = Math.ceil(data.length / cols);
+        const spacing = 6.0;
+        const cubeSize = 4.0;
+
+        for (let i = 0; i < data.length; i++) {
+          const item = data[i];
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          const x = (col - (cols - 1) / 2) * spacing;
+          const z = (row - (rows - 1) / 2) * spacing;
+
+          const height = Math.max(0.5, Math.abs(item.change) * 1.6);
+          const baseColor = getColor(item.change);
+          const labelTexture = createFaceTexture(item.ticker, item.change);
+
+          const materials = [];
+          for (let f = 0; f < 6; f++) {
+            materials.push(new THREE.MeshPhongMaterial({
+              color: baseColor,
+              transparent: true,
+              depthWrite: false
+            }));
+          }
+
+          const cube = new THREE.Mesh(
+            new THREE.BoxGeometry(cubeSize, height, cubeSize),
+            materials
+          );
+
+          let yPosition;
+          if (item.change >= 0) {
+            yPosition = height / 2;
+          } else {
+            yPosition = -height / 2;
+          }
+          cube.position.set(x, yPosition, z);
+          group.add(cube);
+
+          cube.userData = {
+            item,
+            labelTexture,
+            baseColor
+          };
+          allCubes.push(cube);
+        }
+
+        const titleCanvas = document.createElement('canvas');
+        titleCanvas.width = 1024 * DPR;
+        titleCanvas.height = 256 * DPR;
+        titleCanvas.style.width = '1024px';
+        titleCanvas.style.height = '256px';
+        const tCtx = titleCanvas.getContext('2d');
+        tCtx.scale(DPR, DPR);
+        tCtx.fillStyle = isLightTheme ? 'rgba(50,50,50,0.9)' : 'rgba(255,255,255,0.9)';
+        tCtx.font = 'bold 60px Arial';
+        tCtx.textAlign = 'center';
+        tCtx.textBaseline = 'middle';
+        tCtx.fillText(sectorName, 512, 128);
+        const titleTex = new THREE.CanvasTexture(titleCanvas);
+        titleTex.minFilter = THREE.LinearFilter;
+        const titleMat = new THREE.SpriteMaterial({ map: titleTex, transparent: true });
+        const title = new THREE.Sprite(titleMat);
+        title.scale.set(20, 4, 1);
+        title.position.set(0, -4, (rows - 1) * spacing / 2 + 2);
+        group.add(title);
+
+        scene.add(group);
+        return group;
+      }
+
+      const SECTOR_TICKERS = {
+        "НЕФТЕГАЗОВЫЙ СЕКТОР": ["ROSN", "LKOH", "NVTK", "GAZP", "SIBN", "TATN", "SNGS", "BANEP", "RUSN"],
+        "СТРОИТЕЛЬНЫЙ СЕКТОР": ["PIK", "SMLT", "LSRG", "ETLN"],
+        "РИТЕЙЛ": ["FIVE", "MGNT", "OZON", "FIXP", "NOVB", "LNTA", "MVID", "OKY"],
+        "ЭЛЕКТРОЭНЕРГИЯ": ["IRAO", "HYDR", "ENPG", "MEG", "FEES", "UPRO", "EL5", "TGKA", "OGK2"],
+        "ЦВЕТНАЯ МЕТАЛЛУРГИЯ": ["GMKN", "AVSM", "RUAL", "RUSO"],
+        "ЧЁРНАЯ МЕТАЛЛУРГИЯ": ["CHMF", "MMK", "NLMK", "MSTOR", "TMK", "RASP"],
+        "ФИНАНСОВЫЙ СЕКТОР": ["MOEX", "AFKS", "SFIN", "RENI", "EPLN"],
+        "ТРАНСПОРТНЫЙ СЕКТОР": ["SCFT", "DVMP", "NMTP", "AFLT", "GTRK", "TRNF", "VSHD"],
+        "ИНТЕРНЕТ": ["YNDX", "VKCO", "CIAN", "HHRU", "SLCT"],
+        "ТЕЛЕКОМ": ["MTSS", "RTKM"],
+        "ДРАГ. МЕТАЛЛЫ": ["POLY", "UGMK", "POLM", "SGGD", "ALRS"],
+        "ПИЩЕВОЙ СЕКТОР + УДОБРЕНИЯ": ["CHKZ", "RUSI", "INAR", "PHOR", "AKRN"],
+        "БАНКИ": ["SBER", "VTBR", "SKBI", "TCSG", "SPB"],
+        "HIGH TECH": ["DSFT", "POSI", "ASTR"]
+      };
+
+      async function loadMoexData() {
+        try {
+          const url = 'https://iss.moex.com/iss/engines/stock/markets/shares/boards/TQBR/securities.json?iss.only=marketdata,securities';
+          const response = await fetch(url);
+          const data = await response.json();
+
+          const securities = data.securities.data;
+          const marketdata = data.marketdata.data;
+
+          const marketMap = {};
+          for (const row of marketdata) {
+            marketMap[row[0]] = row;
+          }
+
+          const result = {};
+          for (const [sectorName, tickers] of Object.entries(SECTOR_TICKERS)) {
+            result[sectorName] = [];
+
+            const sectorItems = [];
+            for (const ticker of tickers) {
+              const secData = securities.find(s => s[0] === ticker);
+              if (!secData) continue;
+
+              const marketRow = marketMap[ticker];
+              if (!marketRow) continue;
+
+              let change = parseFloat(marketRow[6]) || 0;
+              const volume = parseFloat(marketRow[5]) || 0;
+
+              change = Math.max(-5, Math.min(5, change));
+
+              sectorItems.push({
+                ticker: ticker,
+                change: change,
+                volume: volume
+              });
+            }
+
+            sectorItems.sort((a, b) => b.volume - a.volume).slice(0, 4);
+            result[sectorName] = sectorItems;
+          }
+
+          return result;
+
+        } catch (e) {
+          console.error("Ошибка загрузки данных MOEX:", e);
+          return {};
+        }
+      }
+
+      async function initDashboard() {
+        document.getElementById('loading').style.display = 'block';
+
+        const data = await loadMoexData();
+        if (Object.keys(data).length === 0) {
+          console.warn("Нет данных для отображения");
+          document.getElementById('loading').style.display = 'none';
+          return;
+        }
+
+        scene.remove(...scene.children.filter(c => c.userData && c.userData.name));
+        sectorGroups = [];
+        allCubes = [];
+
+        const sectorsWithData = Object.keys(data).filter(name => data[name].length > 0);
+        const totalSectors = sectorsWithData.length;
+        
+        const aspect = window.innerWidth / window.innerHeight;
+        let colsPerRow;
+        
+        if (aspect > 1.5) {
+          colsPerRow = Math.min(4, Math.ceil(Math.sqrt(totalSectors)));
+        } else if (aspect > 1) {
+          colsPerRow = Math.min(3, Math.ceil(Math.sqrt(totalSectors)));
+        } else {
+          colsPerRow = Math.min(2, Math.ceil(Math.sqrt(totalSectors / aspect)));
+        }
+        
+        colsPerRow = Math.ceil(totalSectors / 3);
+        const rows = 3;
+        
+        const spacingX = 20;
+        const spacingZ = 25;
+
+        const positions = [];
+        let idx = 0;
+        for (const name of sectorsWithData) {
+          const col = idx % colsPerRow;
+          const row = Math.floor(idx / colsPerRow);
+          positions.push(new THREE.Vector3(
+            (col - (colsPerRow - 1) / 2) * spacingX,
+            0,
+            (row - (rows - 1) / 2) * spacingZ
+          ));
+          idx++;
+        }
+
+        let posIdx = 0;
+        for (const name of sectorsWithData) {
+          const group = createHeatmap(name, data[name], positions[posIdx++]);
+          sectorGroups.push(group);
+        }
+
+        if (controls) {
+          controls.dispose();
+          controls = null;
+        }
+
+        initialState.frustumSize = aspect > 3.5 ? 100 : 80;
+        const frustumSize = initialState.frustumSize;
+
+        camera.left = -frustumSize * aspect / 2;
+        camera.right = frustumSize * aspect / 2;
+        camera.top = frustumSize / 2;
+        camera.bottom = -frustumSize / 2;
+        camera.updateProjectionMatrix();
+
+        camera.position.set(0, 80, 50);
+        camera.lookAt(0, 0, 0);
+
+        initialState = {
+          camera: {
+            position: camera.position.clone(),
+            target: new THREE.Vector3(0, 0, 0),
+            left: camera.left,
+            right: camera.right,
+            top: camera.top,
+            bottom: camera.bottom
+          },
+          sectors: sectorGroups.map(group => ({
+            name: group.userData.name,
+            position: group.position.clone(),
+            rotation: group.rotation.clone()
+          })),
+          frustumSize: frustumSize
+        };
+
+        document.getElementById('loading').style.display = 'none';
+      }
+
+      function fitCameraToScene() {
+        if (sectorGroups.length === 0) return;
+
+        const box = new THREE.Box3();
+        sectorGroups.forEach(group => {
+          const groupBox = new THREE.Box3().setFromObject(group);
+          box.union(groupBox);
+        });
+
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+
+        const aspect = window.innerWidth / window.innerHeight;
+        
+        const baseSize = aspect > 1.5 ? 120 : 90;
+        const frustumSize = aspect > 1 ? baseSize : baseSize / aspect;
+
+        camera.left = -frustumSize * aspect / 2;
+        camera.right = frustumSize * aspect / 2;
+        camera.top = frustumSize / 2;
+        camera.bottom = -frustumSize / 2;
+        camera.updateProjectionMatrix();
+
+        const cameraDistance = Math.max(frustumSize * 0.15, size.z * 0.3);
+        const cameraHeight = Math.max(size.y * 0.5, size.z * 0.2);
+        camera.position.set(
+          center.x, 
+          center.y + cameraHeight,
+          center.z + cameraDistance
+        );
+        camera.lookAt(center);
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      let isDragging = false;
+      renderer.domElement.addEventListener('mousedown', () => isDragging = false);
+      renderer.domElement.addEventListener('mousemove', () => isDragging = true);
+      window.addEventListener('mouseup', () => isDragging = false);
+
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+
+      renderer.domElement.addEventListener('click', (event) => {
+        if (isDragging) {
+          isDragging = false;
+          return;
+        }
+
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(scene.children, true);
+
+        let clickedGroup = null;
+        for (const hit of intersects) {
+          let obj = hit.object;
+          while (obj) {
+            if (sectorGroups.includes(obj)) {
+              clickedGroup = obj;
+              break;
+            }
+            obj = obj.parent;
+          }
+          if (clickedGroup) break;
+        }
+
+        if (clickedGroup && clickedGroup !== focusedSector) {
+          focusOnSector(clickedGroup);
+        } else if (focusedSector && intersects.length === 0) {
+          unfocusSector();
+        }
+      });
+
+      function focusOnSector(group) {
+        sectorGroups.forEach(g => g.visible = (g === group));
+        new TWEEN.Tween(group.position)
+          .to({ x: 0, y: 0, z: 0 }, 800)
+          .easing(TWEEN.Easing.Quadratic.Out)
+          .start();
+
+        const aspect = window.innerWidth / window.innerHeight;
+        const focusFrustum = initialState.frustumSize * 0.5;
+        new TWEEN.Tween({
+          left: camera.left,
+          right: camera.right,
+          top: camera.top,
+          bottom: camera.bottom
+        })
+        .to({
+          left: -focusFrustum * aspect / 2,
+          right: focusFrustum * aspect / 2,
+          top: focusFrustum / 2,
+          bottom: -focusFrustum / 2
+        }, 800)
+        .easing(TWEEN.Easing.Quadratic.Out)
+        .onUpdate(function(obj) {
+          camera.left = obj.left;
+          camera.right = obj.right;
+          camera.top = obj.top;
+          camera.bottom = obj.bottom;
+          camera.updateProjectionMatrix();
+        })
+        .start();
+
+        if (controls) controls.dispose();
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 8;
+        controls.maxDistance = 40;
+        controls.target.set(0, 0, 0);
+        controls.update();
+        focusedSector = group;
+      }
+
+      function unfocusSector() {
+        if (!focusedSector) return;
+
+        camera.left = initialState.camera.left;
+        camera.right = initialState.camera.right;
+        camera.top = initialState.camera.top;
+        camera.bottom = initialState.camera.bottom;
+        camera.near = 0.1;
+        camera.far = 5000;
+        camera.updateProjectionMatrix();
+        if (controls && controls.object) {
+          controls.object.zoom = 1;
+          controls.object.updateProjectionMatrix();
+        }
+
+        const currentPos = camera.position.clone();
+        new TWEEN.Tween(currentPos)
+          .to(initialState.camera.position, 800)
+          .onUpdate(() => {
+            camera.position.copy(currentPos);
+            camera.lookAt(initialState.camera.target);
+          })
+          .onComplete(() => {
+            camera.position.copy(initialState.camera.position);
+            camera.lookAt(initialState.camera.target);
+            camera.left = initialState.camera.left;
+            camera.right = initialState.camera.right;
+            camera.top = initialState.camera.top;
+            camera.bottom = initialState.camera.bottom;
+            camera.updateProjectionMatrix();
+            sectorGroups.forEach((group, index) => {
+              const savedState = initialState.sectors.find(s => s.name === group.userData.name);
+              if (savedState) {
+                group.position.copy(savedState.position);
+                group.rotation.copy(savedState.rotation);
+                group.visible = true;
+              }
+            });
+          })
+          .start();
+
+        new TWEEN.Tween(focusedSector.position)
+          .to(focusedSector.userData.originalPos, 800)
+          .easing(TWEEN.Easing.Quadratic.Out)
+          .onComplete(() => {
+            sectorGroups.forEach(g => g.visible = true);
+          })
+          .start();
+
+        if (controls) {
+          controls.dispose();
+          controls = null;
+        }
+        focusedSector = null;
+      }
+
+      const tempWorldPos = new THREE.Vector3();
+      const viewDir = new THREE.Vector3();
+
+      function updateCubeLabels() {
+        for (const cube of allCubes) {
+          if (!cube.visible) continue;
+
+          cube.getWorldPosition(tempWorldPos);
+          viewDir.subVectors(camera.position, tempWorldPos).normalize();
+
+          const localViewDir = viewDir.clone().applyQuaternion(
+            new THREE.Quaternion().setFromRotationMatrix(
+              new THREE.Matrix4().extractRotation(cube.matrixWorld).invert()
+            )
+          );
+
+          let bestFace = 0;
+          let maxDot = -Infinity;
+          for (let i = 0; i < 6; i++) {
+            const dot = localViewDir.dot(FACE_NORMALS[i]);
+            if (dot > maxDot) {
+              maxDot = dot;
+              bestFace = i;
+            }
+          }
+
+          const mats = cube.material;
+          for (let i = 0; i < 6; i++) {
+            mats[i].map = null;
+            mats[i].needsUpdate = true;
+          }
+
+          mats[bestFace].map = cube.userData.labelTexture;
+          mats[bestFace].needsUpdate = true;
+        }
+      }
+
+      const clock = new THREE.Clock();
+      function animate() {
+        requestAnimationFrame(animate);
+        const time = clock.getElapsedTime();
+
+        updateCubeLabels();
+
+        if (!focusedSector) {
+          sectorGroups.forEach((group, i) => {
+            group.rotation.y = Math.sin(time * 0.15 + i * 1.2) * 0.2;
+            group.position.y = Math.sin(time * 0.5 + i) * 1.0;
+          });
+        }
+
+        if (controls) controls.update();
+        TWEEN.update();
+        renderer.render(scene, camera);
+      }
+
+      window.addEventListener('resize', () => {
+        setTimeout(() => {
+          fitCameraToScene();
+        }, 100);
+      });
+
+      const backBtn = document.getElementById('back-btn');
+      if (backBtn) {
+        backBtn.onclick = () => {
+          if (focusedSector) {
+            unfocusSector();
+          }
+        };
+      }
+
+      function showBackBtn(show) {
+        if (backBtn) backBtn.style.display = show ? 'block' : 'none';
+      }
+      const origFocusOnSector = focusOnSector;
+      focusOnSector = function(group) {
+        showBackBtn(true);
+        origFocusOnSector(group);
+      };
+      const origUnfocusSector = unfocusSector;
+      unfocusSector = function() {
+        showBackBtn(false);
+        origUnfocusSector();
+      };
+      showBackBtn(false);
+
+      initDashboard();
+      setInterval(() => {
+        if (!focusedSector) {
+          initDashboard();
+        }
+      }, 5000);
+
+      animate();
+    }
+  </script>
+</body>
+</html>
